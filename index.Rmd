@@ -1,0 +1,251 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Welcome to Team From Above's repository of work done during the JournalismAI 2021 Collab Challenge in the Americas earth_americas.
+Background
+
+For this year's challenge, participants from various newsrooms across the Americas came together to work with the Knight Lab team at Northwestern University exploring how we might use AI technologies to innovate newsgathering and investigative reporting techniques.
+Team members
+
+    Gibran Mena (DataCritica)
+    Shreya Vaidyanathan (Bloomberg News)
+    David Ingold (Bloomberg News)
+    Flor Coehlo (LaNacion)
+    María Teresa Ronderos (CLIP)
+
+First, we start by loading the libraries (packages) we need for this task. 
+
+```{r, include = F, message=FALSE}
+
+rm(list = ls(all.names = TRUE)) # will clear all objects, including hidden objects
+gc() # free up memory and report memory usage
+```
+
+```{r include=T,  message=FALSE}
+# load required libraries (Note: if these packages are not installed, then install them first and then load)
+ 
+library(sf)
+library(stars)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(mapview)
+library(caret)
+library(forcats)
+library(RStoolbox)
+
+```
+Then we read in and explore the satellite data matching our Area of Interest, previously downloaded from services suchs as Planet's NICFi or Sentinel data. Encoded in a satellite image, there is reflectance information encoded in blue, green, read and near infra red spectrums of an image such as the ones from the Planet program. Load the satellite image, in this case Planet's analytical tif file with four bands: G,R,B and Near Infrared (NIR)
+
+```{r include=T,  message=FALSE}
+
+satellite_data <- read_stars("input/colombia2_analytic.tif", proxy = T, resample = "cubic_spline")
+plot(satellite_data)
+
+```
+
+As you can see, there are five available bands for this image, which are already loaded into a stack (several images with exactly matching area and resolution, although different information) This different information layers will constitute the data that will feed the learning algorithm, once we match it with ourlabelling data.
+
+We could read in several layers one by one and then  stacking them together, but we did for this tutorial in the first example. To get to know better our information, we can read resolution, number and names of layers.
+
+```{r include=T,  message=TRUE}
+st_crs(satellite_data)
+st_dimensions(satellite_data)
+
+```
+
+But first, we can generate additional information, such as the normalized Vegetation Index (NDVI), usually brought up by land classification tasks. To find out what spectral band of an analytic image (as opposed to visual images downloaded from Planet) is represented by each layer, we can visit for this image https://www.planet.com/products/satellite-imagery/files/1610.06_Spec%20Sheet_Combined_Imagery_Product_Letter_ENGv1.pdf. We learn that the bands for our image are BGR NIR
+
+```{r include=T,  message=FALSE, echo=FALSE}
+#Plotting true and false color composites 
+
+par(mfrow = c(1, 2))
+#plot(satellite_data, rgb = c(3,2,1), reset = FALSE, main = "RGB")    # rgb
+#plot(r, rgb = c(4,3,2), main = "False color (NIR-R-G)") # false color
+
+raster::plotRGB(as(satellite_data, "Raster"), r = 3, g = 2, b = 1, axes = TRUE, stretch = "lin", main = "True Color Composite of AOI")
+raster::plotRGB(as(satellite_data, "Raster"), r = 4, g = 3, b = 2, axes = TRUE, stretch = "lin", main = "False Color Composite of AOI")
+
+
+#viewRGB(as(satellite_data,"Raster"), r=3,g=2,b=1)
+
+```
+The false color composite uses NIR (4) for red, red (3) for green, and green (2) for blue. This is good for detecting vegetation
+
+Next we calculate Normalized Difference Vegetation Index (NDVI), per https://urbanspatial.github.io/classifying_satellite_imagery_in_R/  
+NDVI provides another way to identify vegetation and is calculated on a scale of -1 to 1, where values closer to 1 indicate more vegetative cover.  The calculation is based on how pigments in vegetation absorb sunlight compared to other ground cover. We calculate NDVI using the following equation (NIR - Red)/(NIR + Red). The [[ ]] notation specifies the bands, in this case band 4 for NIR and band 3 for Red, within the multi-band raster.
+
+```{r include=T,  message=FALSE}
+
+red = satellite_data[,,,1, drop = TRUE]
+nir = satellite_data[,,,4, drop = TRUE]
+ndvi = (nir - red) / (nir + red)
+names(ndvi) = "NDVI"
+
+plot(ndvi, breaks = "equal", col = hcl.colors(15, "Spectral"))
+
+
+```
+
+Now we need to label this data for what is called a supervised modelling approach, where we teach the machine how to integrate encoded information with "truth" ground information, the labels for the phenomena we need to understand better from the ground. These we achieved using a tool such as Groundwork (image of groundwork)
+
+We read in the output data for the collaborative excercise from GroundWork, this is achieved pulling in a file in geojson format.
+
+
+```{r include=T,  message=FALSE}
+labels <- st_read("input/cd5e80ac-7548-490f-becd-06cc894b1e2f.geojson")
+labels_crs <- st_transform(labels, st_crs(satellite_data))
+
+```
+
+Now we create file for ML algorithm to learn from data, matching the raster (satellite image) with the labelling data, using the R package called stars, the function is called aggregate and can also be used within GIS programs like QGIS. In R, we aggregate the polygon data from the annotation to the raster data of the image. To run this part of the code, uncomment it. It takes somes minutes to aggregate the data. Here we save it and then load it in R, to avoid running the process in this tutorial.
+
+```{r create files for learning}
+
+# (
+# model_data <- aggregate(satellite_data, labels_crs, FUN = mean, na.rm = TRUE) %>%
+#   st_as_sf()
+# )
+
+#extr <- st_extract(satellite_data, labels_crs, FUN = mean, na.rm = TRUE) %>% 
+#  st_as_sf()
+
+#save(model_data, file="process_data/model_data.RData")
+# load("processed_data/sup_model_data.RData")
+# #names(model_data) <- c("blue", "green", "red", "nir", "alpha", "geometry")
+# ggR(clas_sup$map,geom_raster = TRUE,forceCat = TRUE)
+```
+
+We are still missing the nice data table we need with latitude, longitude and the classes for each annotation
+
+```{r making the data frame} 
+
+# model_data <- mutate(model_data, centroids = st_centroid(model_data$geometry))
+# model_data <- st_join(model_data, labels_crs)
+# model_data <- st_drop_geometry(model_data)
+# names(model_data)[7] <- "annotation_class"
+# model_data[c(5,6,8:11)] <- NULL #We get rid of non-informative columns
+# 
+# model_data <- unnest_wider(model_data, centroids) #make the "centroids" column, a list, into two columns in a data.frame
+# names(model_data)[6] <- "x"
+# names(model_data)[7] <- "y"
+
+# training_data <- geojsonsf::geojson_sf("input/cd5e80ac-7548-490f-becd-06cc894b1e2f.geojson", expand_geometries = T)
+# training_data <- as(training_data, 'sf')  #this is the one?
+# training_data <- as(training_data, 'Spatial')
+# training_data <- spTransform(training_data, crs(planet_data))  # this one too
+
+#load(processed_data/sup_model_data.RData)
+
+
+```
+Now we divide the model data into training and validation sets for the model to start learning
+
+```{r model data, test and train}
+
+# set.seed(100)
+# trainids <- createDataPartition(model_data$annotation_class,list=FALSE,p=0.7)
+# trainDat <- model_data[trainids,]
+# testDat <- model_data[-trainids,]
+
+```
+
+
+```{r featurePlot2}
+
+
+#rs = split(satellite_data)
+# trn = st_extract(rs, labels_crs)
+#model = MASS::lda(annotation_class ~ ., trainDat)
+
+#pr = predict(rs, model)
+
+# featurePlot(x = trainDat[, c("blue","green","red","nir")], 
+#             y = factor(trainDat$annotation_class), 
+#             plot = "pairs",
+#             auto.key = list(columns = 5))
+```
+From this excercise, we learn that there are pairs of bands that will separate Farmlands from forest, as the intersection of band 3(red) and 4 (near infra red) show
+
+```{r vars}
+# predictors <- c("blue","green","red","nir")
+# response <- as.factor("annotation_class")
+```
+
+```{r train}
+# set.seed(100)
+# model <- train(trainDat[,predictors],trainDat[,response],method="rf",
+#                trControl=trainControl(method="cv"),importance=TRUE)
+# print(model)
+```
+### Variable importance and effect of mtry tuning
+
+The effect of mtry tuning can be visualized by plotting the model. 
+
+```{r trainVIS}
+# plot(model)
+```
+
+Again we notice by the scale of the y axis that this model is insensitive to varying mtry values.
+Having a look at the varImp we see which variables are important to delineate the individual land cover classes.
+
+```{r trainVIS2}
+# plot(varImp(model))
+```
+## Model prediction
+
+Finally we want to use the model for making spatial predictions, hence for classifying the entire Sentinel scene. Therefore the model is applied on the full raster stack using the predict function from the raster package.
+
+```{r predict}
+#planet_data <- raster::raster("colombia2_analytic.tif")
+# prediction <- predict(satellite_data, model, drop_dimensions=TRUE)  #need to reactivate
+
+# plot(prediction), col = sf.colors(nclus, categorical=TRUE), reset = FALSE)
+# sp::spplot(prediction,col.regions=c("brown","darkgreen","black","yellow",
+#                                 "green","white","red"))
+```
+
+Now we can create a map with meaningful colors of the predicted land cover.
+
+```{r predictVIS}
+
+load("processed_data/sup_model_data.RData")
+ggR(clas_sup$map,geom_raster = TRUE,forceCat = TRUE)
+```
+```{r include=T,  message=FALSE}
+
+
+
+#data_labels <- as.data.frame(aggregate(satellite_data, labels_crs, FUN = mean)) To run this code, take the # out of the line
+#data_labels <- data_labels %>% pivot_wider(names_from = band, values_from = colombia2_analytic.tif)
+#labels_crs <- left_join(labels_crs, data_labels)
+#labels_crs[c(3:11)] <- NULL #Get rid of non informative columns
+#names(labels_crs) <- c("id","cover_class", "band1", "band2", "band3", "band4", "band5", "geometry")
+#save(labels_crs, file="labels_crs.RData")
+#Here, we load the result of the previous code to avoid running it every time and we see that the data is all merged
+#load("labels_crs.RData")
+#head(labels_crs)
+
+```
+
+Now we are ready to train our model with the merged data of the raster image + labelling polygons we gained from the collective annotation. First we transform the sf object into a simpler dataframe
+
+```{r}
+
+# predictors <- c("B02","B03","B04","B05","B06","B07",
+#                 "B08","B8A","yellowness","NDVI")
+# response <- "Class"
+# 
+# 
+# clas_nosup <- unsuperClass(satellite_data, nSamples = 200, nClasses = 6, nStarts = 5)
+# class(clas_nosup)
+
+```
+
+
+```{r}
+
+
+```
