@@ -1,7 +1,16 @@
 ---
-title: "R Notebook"
-output: html_notebook
+title: "From Above technical guide"
+author: "Gibran Mena"
+output: 
+  html_notebook:
+    code_folding: hide
+    fig_caption: yes
+    toc: yes
+    toc_collapse: no
+    toc_float: yes
 ---
+
+# About the guide
 
 Welcome to Team From Above's repository of work done during the JournalismAI 2021 Collab Challenge in the Americas earth_americas.
 Background
@@ -14,6 +23,9 @@ Team members
     David Ingold (Bloomberg News)
     Flor Coehlo (LaNacion)
     María Teresa Ronderos (CLIP)
+    
+    
+# Preparation
 
 First, we start by loading the libraries (packages) we need for this task. 
 
@@ -37,7 +49,12 @@ library(forcats)
 library(RStoolbox)
 
 ```
+
+# Reading the data in
+
 Then we read in and explore the satellite data matching our Area of Interest, previously downloaded from services suchs as Planet's NICFi or Sentinel data. Encoded in a satellite image, there is reflectance information encoded in blue, green, read and near infra red spectrums of an image such as the ones from the Planet program. Load the satellite image, in this case Planet's analytical tif file with four bands: G,R,B and Near Infrared (NIR)
+
+## Understanding the layers of raster images
 
 ```{r include=T,  message=FALSE}
 
@@ -72,6 +89,9 @@ raster::plotRGB(as(satellite_data, "Raster"), r = 4, g = 3, b = 2, axes = TRUE, 
 #viewRGB(as(satellite_data,"Raster"), r=3,g=2,b=1)
 
 ```
+
+## Combining layers in different ways
+
 The false color composite uses NIR (4) for red, red (3) for green, and green (2) for blue. This is good for detecting vegetation
 
 Next we calculate Normalized Difference Vegetation Index (NDVI), per https://urbanspatial.github.io/classifying_satellite_imagery_in_R/  
@@ -93,12 +113,15 @@ Now we need to label this data for what is called a supervised modelling approac
 
 We read in the output data for the collaborative excercise from GroundWork, this is achieved pulling in a file in geojson format.
 
+## Reading in the annotation data
 
 ```{r include=T,  message=FALSE}
 labels <- st_read("input/cd5e80ac-7548-490f-becd-06cc894b1e2f.geojson")
 labels_crs <- st_transform(labels, st_crs(satellite_data))
 
 ```
+
+## Merging the data
 
 Now we create file for ML algorithm to learn from data, matching the raster (satellite image) with the labelling data, using the R package called stars, the function is called aggregate and can also be used within GIS programs like QGIS. In R, we aggregate the polygon data from the annotation to the raster data of the image. To run this part of the code, uncomment it. It takes somes minutes to aggregate the data. Here we save it and then load it in R, to avoid running the process in this tutorial.
 
@@ -241,9 +264,19 @@ planet_data <- raster::raster("input/colombia2_analytic.tif")
 
 Now we can create a map with meaningful colors of the predicted land cover.
 
-```{r predictVIS}
+```{r predictVIS,eval=FALSE}
+
+clas_sup <- superClass(satellite_data,trainData = labels_crs, responseCol = "default",
+                       model="mlc")
+```
+
+```{r load model data ,echo = FALSE}
 
 load("process_data/FromAbovemodel.RData")
+
+```
+
+```{r Plot the prediction ,echo = TRUE}
 ggR(clas_sup$map,geom_raster = TRUE,forceCat = TRUE)
 #ggR(prediction$colombia2_analytic.tif = TRUE,forceCat = TRUE)
 
