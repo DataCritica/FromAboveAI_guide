@@ -17,8 +17,9 @@ output:
 
 # About the guide
 
-Welcome to Team From Above's repository of work done during the JournalismAI 2021 Collab Challenge in the Americas earth_americas.
-Background
+Welcome to Team From Above's repository of work done during the JournalismAI 2021 Collab Challenge in the Americas.
+
+##Background
 
 For this year's challenge, participants from various newsrooms across the Americas came together to work with the Knight Lab team at Northwestern University exploring how we might use AI technologies to innovate newsgathering and investigative reporting techniques.
 Team members
