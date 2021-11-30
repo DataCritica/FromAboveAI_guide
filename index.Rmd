@@ -102,35 +102,43 @@ labels_crs <- st_transform(labels, st_crs(satellite_data))
 
 Now we create file for ML algorithm to learn from data, matching the raster (satellite image) with the labelling data, using the R package called stars, the function is called aggregate and can also be used within GIS programs like QGIS. In R, we aggregate the polygon data from the annotation to the raster data of the image. To run this part of the code, uncomment it. It takes somes minutes to aggregate the data. Here we save it and then load it in R, to avoid running the process in this tutorial.
 
-```{r create files for learning}
+```{r create files for learning, eval=FALSE, echo = TRUE }
 
-# (
-# model_data <- aggregate(satellite_data, labels_crs, FUN = mean, na.rm = TRUE) %>%
-#   st_as_sf()
-# )
+(
+model_data <- aggregate(satellite_data, labels_crs, FUN = mean, na.rm = TRUE) %>%
+st_as_sf()
+)
+```
 
+```{r load model, echo = FALSE }
 #extr <- st_extract(satellite_data, labels_crs, FUN = mean, na.rm = TRUE) %>% 
 #  st_as_sf()
 
 #save(model_data, file="process_data/model_data.RData")
-# load("processed_data/sup_model_data.RData")
-# #names(model_data) <- c("blue", "green", "red", "nir", "alpha", "geometry")
+load("processed_data/sup_model_data.RData")
+
 # ggR(clas_sup$map,geom_raster = TRUE,forceCat = TRUE)
 ```
 
+```{r continue creatig dataframe }
+
+names(model_data) <- c("blue", "green", "red", "nir", "alpha", "geometry")
+
+```
 We are still missing the nice data table we need with latitude, longitude and the classes for each annotation
 
 ```{r making the data frame} 
 
-# model_data <- mutate(model_data, centroids = st_centroid(model_data$geometry))
-# model_data <- st_join(model_data, labels_crs)
-# model_data <- st_drop_geometry(model_data)
-# names(model_data)[7] <- "annotation_class"
-# model_data[c(5,6,8:11)] <- NULL #We get rid of non-informative columns
-# 
-# model_data <- unnest_wider(model_data, centroids) #make the "centroids" column, a list, into two columns in a data.frame
-# names(model_data)[6] <- "x"
-# names(model_data)[7] <- "y"
+model_data <- mutate(model_data, centroids = st_centroid(model_data$geometry))
+model_data <- st_join(model_data, labels_crs)
+model_data <- st_drop_geometry(model_data)
+names(model_data)[7] <- "annotation_class"
+model_data[c(5,8:11)] <- NULL #We get rid of non-informative columns
+model_data <- as_data_frame(model_data)
+model_data <- unnest_wider(model_data, centroids, simplify = T) #make the "centroids" column, a list, into two columns in a data.frame
+
+names(model_data)[7] <- "x"
+names(model_data)[8] <- "y"
 
 # training_data <- geojsonsf::geojson_sf("input/cd5e80ac-7548-490f-becd-06cc894b1e2f.geojson", expand_geometries = T)
 # training_data <- as(training_data, 'sf')  #this is the one?
@@ -145,10 +153,31 @@ Now we divide the model data into training and validation sets for the model to 
 
 ```{r model data, test and train}
 
-# set.seed(100)
-# trainids <- createDataPartition(model_data$annotation_class,list=FALSE,p=0.7)
-# trainDat <- model_data[trainids,]
-# testDat <- model_data[-trainids,]
+set.seed(100)
+trainids <- createDataPartition(model_data$annotation_class,list=FALSE,p=0.7)
+trainDat <- model_data[trainids,]
+testDat <- model_data[-trainids,]
+
+nnet.grid = expand.grid(size = seq(from = 2, to = 10, by = 2), # number of neurons units in the hidden layer 
+                        decay = seq(from = 0.1, to = 0.5, by = 0.1)) # regularization parameter to avoid over-fitting 
+
+rf.grid <- expand.grid(mtry=1:4) # number of variables available for splitting at each tree node
+
+svm.grid <- expand.grid(sigma=seq(from = 0.01, to = 0.10, by = 0.02), # controls for non-linearity in the hyperplane
+                        C=seq(from = 2, to = 10, by = 2)) # controls the influence of each support vector
+
+rf_model <- caret::train(x = trainDat[,(5:ncol(trn)-1)], y = as.factor(as.integer(as.factor(trainDat$annotation_class))),
+                         method = "rf", metric="Accuracy", trainControl = tc, tuneGrid = rf.grid)
+
+# # Train the neural network model
+# nnet_model <- caret::train(x = trainDat[,(5:ncol(trn)-1)], y = as.factor(as.integer(as.factor(trainDat$annotation_class))),
+#                            method = "nnet", metric="Accuracy", trainControl = tc, tuneGrid = nnet.grid)
+
+# Apply the random forest model to the Sentinel-2 data
+rf_prediction = raster::predict(satellite_data, model=rf_model)
+# Convert the evaluation data into a spatial object using the X and Y coordinates and extract predicted values
+eva.sp = SpatialPointsDataFrame(coords = cbind(testDat$x, testDat$y), data = testDat, 
+                                proj4string = crs("+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
 
 ```
 
@@ -162,90 +191,61 @@ Now we divide the model data into training and validation sets for the model to 
 
 #pr = predict(rs, model)
 
-# featurePlot(x = trainDat[, c("blue","green","red","nir")], 
-#             y = factor(trainDat$annotation_class), 
-#             plot = "pairs",
-#             auto.key = list(columns = 5))
+featurePlot(x = trainDat[, c("blue","green","red","nir")],
+            y = factor(trainDat$annotation_class),
+            plot = "pairs",
+            auto.key = list(columns = 5))
 ```
 From this excercise, we learn that there are pairs of bands that will separate Farmlands from forest, as the intersection of band 3(red) and 4 (near infra red) show
 
 ```{r vars}
-# predictors <- c("blue","green","red","nir")
-# response <- as.factor("annotation_class")
+predictors <- c("blue", "green","red","nir")
+response <- as.factor("annotation_class")
+
+y <- trainDat$annotation_class 
+
 ```
 
 ```{r train}
-# set.seed(100)
-# model <- train(trainDat[,predictors],trainDat[,response],method="rf",
-#                trControl=trainControl(method="cv"),importance=TRUE)
-# print(model)
+set.seed(100)
+model <- train(trainDat[,predictors],y,method="rf",importance=TRUE)
+print(model)
 ```
 ### Variable importance and effect of mtry tuning
 
 The effect of mtry tuning can be visualized by plotting the model. 
 
 ```{r trainVIS}
-# plot(model)
+plot(model)
 ```
 
 Again we notice by the scale of the y axis that this model is insensitive to varying mtry values.
 Having a look at the varImp we see which variables are important to delineate the individual land cover classes.
 
 ```{r trainVIS2}
-# plot(varImp(model))
+plot(varImp(model))
 ```
 ## Model prediction
 
-Finally we want to use the model for making spatial predictions, hence for classifying the entire Sentinel scene. Therefore the model is applied on the full raster stack using the predict function from the raster package.
+Finally we want to use the model for making spatial predictions, hence for classifying the entire Sentinel scene. Therefore the model is applied on the full raster stack using the predict function from the raster package. Now we are ready to train our model with the merged data of the raster image + labelling polygons we gained from the collective annotation. First we transform the sf object into a simpler dataframe
+
 
 ```{r predict}
-#planet_data <- raster::raster("colombia2_analytic.tif")
-# prediction <- predict(satellite_data, model, drop_dimensions=TRUE)  #need to reactivate
+planet_data <- raster::raster("input/colombia2_analytic.tif")
+#prediction <- predict(satellite_data, model, drop_dimensions=TRUE)  #need to reactivate
 
-# plot(prediction), col = sf.colors(nclus, categorical=TRUE), reset = FALSE)
-# sp::spplot(prediction,col.regions=c("brown","darkgreen","black","yellow",
-#                                 "green","white","red"))
+#plot(prediction$colombia2_analytic.tif, col = sf.colors(nclus, categorical=TRUE), reset = FALSE)
+#sp::spplot(prediction,col.regions=c("brown","darkgreen","black","yellow",
+                             #  "green","white","red"))
 ```
 
 Now we can create a map with meaningful colors of the predicted land cover.
 
 ```{r predictVIS}
 
-load("processed_data/sup_model_data.RData")
+load("process_data/FromAbovemodel.RData")
 ggR(clas_sup$map,geom_raster = TRUE,forceCat = TRUE)
-```
-```{r include=T,  message=FALSE}
-
-
-
-#data_labels <- as.data.frame(aggregate(satellite_data, labels_crs, FUN = mean)) To run this code, take the # out of the line
-#data_labels <- data_labels %>% pivot_wider(names_from = band, values_from = colombia2_analytic.tif)
-#labels_crs <- left_join(labels_crs, data_labels)
-#labels_crs[c(3:11)] <- NULL #Get rid of non informative columns
-#names(labels_crs) <- c("id","cover_class", "band1", "band2", "band3", "band4", "band5", "geometry")
-#save(labels_crs, file="labels_crs.RData")
-#Here, we load the result of the previous code to avoid running it every time and we see that the data is all merged
-#load("labels_crs.RData")
-#head(labels_crs)
+#ggR(prediction$colombia2_analytic.tif = TRUE,forceCat = TRUE)
 
 ```
 
-Now we are ready to train our model with the merged data of the raster image + labelling polygons we gained from the collective annotation. First we transform the sf object into a simpler dataframe
-
-```{r}
-
-# predictors <- c("B02","B03","B04","B05","B06","B07",
-#                 "B08","B8A","yellowness","NDVI")
-# response <- "Class"
-# 
-# 
-# clas_nosup <- unsuperClass(satellite_data, nSamples = 200, nClasses = 6, nStarts = 5)
-# class(clas_nosup)
-
-```
-
-
-```{r}
-
-
-```
