@@ -1,6 +1,5 @@
 ---
 title: "From Above technical guide"
-author: "From Above Team"
 knit: (function(input_file, encoding) { out_dir <- 'docs'; rmarkdown::render(input_file,
   encoding=encoding, output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
 output:
@@ -15,23 +14,26 @@ output:
     toc_float: yes
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE)
+```
+
 # About the guide
 
 Welcome to Team From Above's repository of work done during the JournalismAI 2021 Collab Challenge in the Americas.
 
-##Background
+#Background
 
 For this year's challenge, participants from various newsrooms across the Americas came together to work with the Knight Lab team at Northwestern University exploring how we might use AI technologies to innovate newsgathering and investigative reporting techniques.
 Team members
 
-    Gibran Mena (DataCritica)
-    Shreya Vaidyanathan (Bloomberg News)
-    David Ingold (Bloomberg News)
-    Flor Coehlo (LaNacion)
-    María Teresa Ronderos (CLIP)
+    Flor Coehlo [LaNacion](https://www.lanacion.com.ar/)
+    María Teresa Ronderos [CLIP](https://www.elclip.org/)
+    Gibran Mena [DataCritica](https://datacritica.org/)
+    Shreya Vaidyanathan [Bloomberg News](https://www.bloomberg.com/)
+    David Ingold [Bloomberg News](https://www.bloomberg.com/)
     
-    
-# Preparation
+## Preparation
 
 First, we start by loading the libraries (packages) we need for this task. 
 
@@ -81,18 +83,13 @@ st_dimensions(satellite_data)
 
 But first, we can generate additional information, such as the normalized Vegetation Index (NDVI), usually brought up by land classification tasks. To find out what spectral band of an analytic image (as opposed to visual images downloaded from Planet) is represented by each layer, we can visit for this image https://www.planet.com/products/satellite-imagery/files/1610.06_Spec%20Sheet_Combined_Imagery_Product_Letter_ENGv1.pdf. We learn that the bands for our image are BGR NIR
 
-```{r include=T,  message=FALSE, echo=FALSE}
+```{r plot different raster layer combinations,  message=FALSE}
 #Plotting true and false color composites 
 
 par(mfrow = c(1, 2))
-#plot(satellite_data, rgb = c(3,2,1), reset = FALSE, main = "RGB")    # rgb
-#plot(r, rgb = c(4,3,2), main = "False color (NIR-R-G)") # false color
 
 raster::plotRGB(as(satellite_data, "Raster"), r = 3, g = 2, b = 1, axes = TRUE, stretch = "lin", main = "True Color Composite of AOI")
 raster::plotRGB(as(satellite_data, "Raster"), r = 4, g = 3, b = 2, axes = TRUE, stretch = "lin", main = "False Color Composite of AOI")
-
-
-#viewRGB(as(satellite_data,"Raster"), r=3,g=2,b=1)
 
 ```
 
@@ -267,7 +264,6 @@ load("processed_data/FromAbovemodel.RData")
 ```{r Plot the prediction ,echo = TRUE}
 
 ggR(clas_sup$map,geom_raster = TRUE,forceCat = TRUE)
-#ggR(prediction$colombia2_analytic.tif = TRUE,forceCat = TRUE)
 
 ```
 
