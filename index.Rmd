@@ -221,7 +221,7 @@ set.seed(100)
 load("model2.RData")
 print(model)
 ```
-### Variable importance and effect of mtry tuning
+# Variable importance and effect of mtry tuning
 
 The effect of mtry tuning can be visualized by plotting the model. 
 
@@ -235,7 +235,7 @@ Having a look at the varImp we see which variables are important to delineate th
 ```{r trainVIS2}
 plot(varImp(model))
 ```
-## Model prediction
+# Model prediction
 
 Finally we want to use the model for making spatial predictions, hence for classifying the entire Sentinel scene. Therefore the model is applied on the full raster stack using the predict function from the raster package. Now we are ready to train our model with the merged data of the raster image + labelling polygons we gained from the collective annotation. First we transform the sf object into a simpler dataframe
 
@@ -263,7 +263,8 @@ load("processed_data/FromAbovemodel.RData")
 
 ```
 
-```{r Plot the prediction }
+```{r Plot the prediction ,echo = TRUE}
+
 ggR(clas_sup$map,geom_raster = TRUE,forceCat = TRUE)
 #ggR(prediction$colombia2_analytic.tif = TRUE,forceCat = TRUE)
 
