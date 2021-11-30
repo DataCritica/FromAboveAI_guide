@@ -1,7 +1,12 @@
 ---
 title: "From Above technical guide"
 author: "Gibran Mena"
-output: 
+knit: (function(input_file, encoding) { out_dir <- 'docs'; rmarkdown::render(input_file,
+  encoding=encoding, output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
+output:
+  html_document:
+    toc: yes
+    df_print: paged
   html_notebook:
     code_folding: hide
     fig_caption: yes
@@ -150,7 +155,7 @@ names(model_data) <- c("blue", "green", "red", "nir", "alpha", "geometry")
 ```
 We are still missing the nice data table we need with latitude, longitude and the classes for each annotation
 
-```{r making the data frame} 
+```{r making the data frame, message=FALSE} 
 
 model_data <- mutate(model_data, centroids = st_centroid(model_data$geometry))
 model_data <- st_join(model_data, labels_crs)
@@ -177,30 +182,10 @@ Now we divide the model data into training and validation sets for the model to 
 ```{r model data, test and train}
 
 set.seed(100)
+
 trainids <- createDataPartition(model_data$annotation_class,list=FALSE,p=0.7)
 trainDat <- model_data[trainids,]
 testDat <- model_data[-trainids,]
-
-nnet.grid = expand.grid(size = seq(from = 2, to = 10, by = 2), # number of neurons units in the hidden layer 
-                        decay = seq(from = 0.1, to = 0.5, by = 0.1)) # regularization parameter to avoid over-fitting 
-
-rf.grid <- expand.grid(mtry=1:4) # number of variables available for splitting at each tree node
-
-svm.grid <- expand.grid(sigma=seq(from = 0.01, to = 0.10, by = 0.02), # controls for non-linearity in the hyperplane
-                        C=seq(from = 2, to = 10, by = 2)) # controls the influence of each support vector
-
-rf_model <- caret::train(x = trainDat[,(5:ncol(trn)-1)], y = as.factor(as.integer(as.factor(trainDat$annotation_class))),
-                         method = "rf", metric="Accuracy", trainControl = tc, tuneGrid = rf.grid)
-
-# # Train the neural network model
-# nnet_model <- caret::train(x = trainDat[,(5:ncol(trn)-1)], y = as.factor(as.integer(as.factor(trainDat$annotation_class))),
-#                            method = "nnet", metric="Accuracy", trainControl = tc, tuneGrid = nnet.grid)
-
-# Apply the random forest model to the Sentinel-2 data
-rf_prediction = raster::predict(satellite_data, model=rf_model)
-# Convert the evaluation data into a spatial object using the X and Y coordinates and extract predicted values
-eva.sp = SpatialPointsDataFrame(coords = cbind(testDat$x, testDat$y), data = testDat, 
-                                proj4string = crs("+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
 
 ```
 
@@ -231,7 +216,9 @@ y <- trainDat$annotation_class
 
 ```{r train}
 set.seed(100)
-model <- train(trainDat[,predictors],y,method="rf",importance=TRUE)
+#model <- train(trainDat[,predictors],y,method="rf",importance=TRUE)
+#save(model, file="model2.RData")
+load("model2.RData")
 print(model)
 ```
 ### Variable importance and effect of mtry tuning
@@ -266,17 +253,17 @@ Now we can create a map with meaningful colors of the predicted land cover.
 
 ```{r predictVIS,eval=FALSE}
 
-clas_sup <- superClass(satellite_data,trainData = labels_crs, responseCol = "default",
-                       model="mlc")
+clas_sup <- superClass(as(satellite_data, "Raster"),trainData = labels_crs, responseCol = "default",
+                       #model="mlc")
 ```
 
 ```{r load model data ,echo = FALSE}
 
-load("process_data/FromAbovemodel.RData")
+load("processed_data/FromAbovemodel.RData")
 
 ```
 
-```{r Plot the prediction ,echo = TRUE}
+```{r Plot the prediction }
 ggR(clas_sup$map,geom_raster = TRUE,forceCat = TRUE)
 #ggR(prediction$colombia2_analytic.tif = TRUE,forceCat = TRUE)
 
